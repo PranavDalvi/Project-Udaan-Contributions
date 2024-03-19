@@ -1,0 +1,115 @@
+'''
+To run: python main.py -d OCRed_Book_Folder
+
+Author: Pranav Dalvi
+'''
+
+import os
+import argparse
+from bs4 import BeautifulSoup
+import re
+import csv
+
+
+def calculate_total_word_count(input_folder_path):
+    total_word_count = 0
+
+    for filename in os.listdir(input_folder_path):
+        if filename.endswith(".html"):
+            file_path = os.path.join(input_folder_path, filename)
+
+            with open(file_path, 'r', encoding='utf-8') as file:
+                html_content = file.read()
+
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Find all <span> and <p> tags on the page
+            span_tags = soup.find_all('span')
+            p_tags = soup.find_all('p')
+
+            # Combine text from both types of tags
+            all_text = ''
+            for tag in span_tags + p_tags:
+                all_text += tag.get_text() + ' '
+
+            words = re.findall(r'\b\w+\b', all_text)
+
+            word_count = len(words)
+            total_word_count += word_count
+
+    return total_word_count
+
+def remove_latex_format(file_path):
+    try:
+        detex_output = subprocess.check_output(['detex', file_path], universal_newlines=True)
+        return detex_output
+    except subprocess.CalledProcessError:
+        print(f'Error running detex for file: {file_path}')
+        return ''
+
+def get_word_count_from_latex_file(file_path):
+    # Get detex output
+    detex_output = remove_latex_format(file_path)
+
+    # Split the text into words
+    words = detex_output.split()
+
+    # Count the words
+    word_count = len(words)
+    return word_count
+
+def get_word_count_from_csv(file_path):
+    column_word_counts = {}
+    total_word_count = 0
+
+    with open(file_path, 'r', encoding='utf-8') as csv_file:
+        csv_reader = csv.reader(csv_file)
+
+        # Transpose the rows and columns for easier processing
+        transposed_data = list(zip(*csv_reader))
+
+        # Process each column
+        for i, column_data in enumerate(transposed_data):
+
+            column_text = ' '.join(column_data)
+
+            words = column_text.split()
+            # Count the words and store the count for each column
+            column_word_counts[f'Column {i+1}'] = len(words)
+            total_word_count += len(words)
+
+    # Add total word count to the dictionary
+    column_word_counts['Total'] = total_word_count
+
+    return column_word_counts
+
+def main():
+    parser = argparse.ArgumentParser(description='Calculate total word count for HTML files in a directory.')
+    parser.add_argument('-d', '--directory_path',default=None, type=str, help='Path to the directory containing HTML files.')
+    parser.add_argument('-x', '--csv_path',default=None, type=str, help='Path to the csv file.')
+
+    args = parser.parse_args()
+    
+    if (args.directory_path != None and args.csv_path == None):
+        input_folder_path = os.path.join(args.directory_path, "CorrectorOutput")
+        total_word_count = calculate_total_word_count(input_folder_path)
+
+        print(f'\nTotal word count for all HTML files in the directory: {total_word_count}\n')
+
+        # Write the total word count to a text file
+        output_file_path = os.path.join(args.directory_path, "word-count.txt")
+        with open(output_file_path, 'w', encoding='utf-8') as output_file:
+            output_file.write(f"Total word count: {total_word_count}")
+
+        print(f'Total word count written to {args.directory_path}word-count.txt')
+
+    elif(args.directory_path == None and args.csv_path != None):
+        word_counts = get_word_count_from_csv(args.csv_path)
+        for column, count in word_counts.items():
+            print(f'Total word count in {column}: {count}')
+    else:
+        print("usage: main.py [-h] -d DIRECTORY_PATH -x CSV_PATH")
+    
+
+if __name__ == "__main__":
+    main()
